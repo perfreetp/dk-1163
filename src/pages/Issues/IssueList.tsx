@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { AlertTriangle, Check, User, Calendar, MessageSquare, ChevronRight, Filter, ListTodo, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { AlertTriangle, Check, User, Calendar, MessageSquare, ChevronRight, Filter, ListTodo, ThumbsUp, ThumbsDown, AlertCircle } from 'lucide-react';
 import { Header } from '@/components/layout';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, Modal } from '@/components/ui';
 import { api } from '@/api/client';
@@ -42,6 +42,8 @@ export function IssueList() {
   const [todoModalOpen, setTodoModalOpen] = useState(false);
   const [adoptionModalOpen, setAdoptionModalOpen] = useState(false);
   const [formData, setFormData] = useState<any>({});
+  const [operationError, setOperationError] = useState<string | null>(null);
+  const [operationLoading, setOperationLoading] = useState(false);
   
   useEffect(() => {
     if (id) {
@@ -76,6 +78,8 @@ export function IssueList() {
   
   async function handleUpdateStatus() {
     if (!selectedIssue) return;
+    setOperationError(null);
+    setOperationLoading(true);
     try {
       const updated = await api.issues.updateStatus(selectedIssue.id, {
         status: formData.status,
@@ -83,15 +87,23 @@ export function IssueList() {
       });
       updateIssue(updated);
       setStatusModalOpen(false);
-      setSelectedIssue(null);
+      setSelectedIssue(updated);
       setFormData({});
-    } catch (error) {
-      console.error('Failed to update status:', error);
+    } catch (error: any) {
+      setOperationError(error.message || '更新状态失败，请稍后重试');
+    } finally {
+      setOperationLoading(false);
     }
   }
   
   async function handleCreateTodo() {
     if (!selectedIssue) return;
+    if (!formData.title) {
+      setOperationError('请输入待办标题');
+      return;
+    }
+    setOperationError(null);
+    setOperationLoading(true);
     try {
       await api.issues.createTodo(selectedIssue.id, {
         title: formData.title,
@@ -101,13 +113,17 @@ export function IssueList() {
       await loadIssueDetails(selectedIssue.id);
       setTodoModalOpen(false);
       setFormData({});
-    } catch (error) {
-      console.error('Failed to create todo:', error);
+    } catch (error: any) {
+      setOperationError(error.message || '创建待办失败，请稍后重试');
+    } finally {
+      setOperationLoading(false);
     }
   }
   
   async function handleRecordAdoption() {
     if (!selectedIssue) return;
+    setOperationError(null);
+    setOperationLoading(true);
     try {
       await api.issues.recordAdoption(selectedIssue.id, {
         isAdopted: formData.isAdopted,
@@ -116,8 +132,10 @@ export function IssueList() {
       await loadIssueDetails(selectedIssue.id);
       setAdoptionModalOpen(false);
       setFormData({});
-    } catch (error) {
-      console.error('Failed to record adoption:', error);
+    } catch (error: any) {
+      setOperationError(error.message || '记录采纳失败，请稍后重试');
+    } finally {
+      setOperationLoading(false);
     }
   }
   
@@ -241,6 +259,7 @@ export function IssueList() {
                           e.stopPropagation();
                           handleSelectIssue(issue);
                           setFormData({ status: issue.status, assignee: issue.assignee });
+                          setOperationError(null);
                           setStatusModalOpen(true);
                         }}
                         className="p-1.5 rounded hover:bg-gray-100 text-gray-500 hover:text-[#1E3A5F] transition-colors"
@@ -252,6 +271,7 @@ export function IssueList() {
                           e.stopPropagation();
                           handleSelectIssue(issue);
                           setFormData({ title: issue.title });
+                          setOperationError(null);
                           setTodoModalOpen(true);
                         }}
                         className="p-1.5 rounded hover:bg-gray-100 text-gray-500 hover:text-[#1E3A5F] transition-colors"
@@ -381,6 +401,7 @@ export function IssueList() {
                 variant="outline"
                 onClick={() => {
                   setFormData({ status: selectedIssue.status, assignee: selectedIssue.assignee });
+                  setOperationError(null);
                   setStatusModalOpen(true);
                 }}
               >
@@ -391,6 +412,7 @@ export function IssueList() {
                 variant="outline"
                 onClick={() => {
                   setFormData({ title: selectedIssue.title });
+                  setOperationError(null);
                   setTodoModalOpen(true);
                 }}
               >
@@ -401,6 +423,7 @@ export function IssueList() {
                 variant="outline"
                 onClick={() => {
                   setFormData({ isAdopted: true });
+                  setOperationError(null);
                   setAdoptionModalOpen(true);
                 }}
               >
@@ -414,16 +437,28 @@ export function IssueList() {
       
       <Modal
         open={statusModalOpen}
-        onClose={() => setStatusModalOpen(false)}
+        onClose={() => {
+          setStatusModalOpen(false);
+          setOperationError(null);
+        }}
         title="更新问题状态"
         footer={
           <>
-            <Button variant="ghost" onClick={() => setStatusModalOpen(false)}>取消</Button>
-            <Button onClick={handleUpdateStatus}>更新</Button>
+            <Button variant="ghost" onClick={() => {
+              setStatusModalOpen(false);
+              setOperationError(null);
+            }}>取消</Button>
+            <Button onClick={handleUpdateStatus} loading={operationLoading}>更新</Button>
           </>
         }
       >
         <div className="space-y-4">
+          {operationError && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-red-500" />
+              <span className="text-sm text-red-700">{operationError}</span>
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">状态</label>
             <select
@@ -451,16 +486,28 @@ export function IssueList() {
       
       <Modal
         open={todoModalOpen}
-        onClose={() => setTodoModalOpen(false)}
+        onClose={() => {
+          setTodoModalOpen(false);
+          setOperationError(null);
+        }}
         title="关联待办事项"
         footer={
           <>
-            <Button variant="ghost" onClick={() => setTodoModalOpen(false)}>取消</Button>
-            <Button onClick={handleCreateTodo}>创建</Button>
+            <Button variant="ghost" onClick={() => {
+              setTodoModalOpen(false);
+              setOperationError(null);
+            }}>取消</Button>
+            <Button onClick={handleCreateTodo} loading={operationLoading}>创建</Button>
           </>
         }
       >
         <div className="space-y-4">
+          {operationError && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-red-500" />
+              <span className="text-sm text-red-700">{operationError}</span>
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">待办标题</label>
             <input
@@ -494,16 +541,28 @@ export function IssueList() {
       
       <Modal
         open={adoptionModalOpen}
-        onClose={() => setAdoptionModalOpen(false)}
+        onClose={() => {
+          setAdoptionModalOpen(false);
+          setOperationError(null);
+        }}
         title="记录采纳情况"
         footer={
           <>
-            <Button variant="ghost" onClick={() => setAdoptionModalOpen(false)}>取消</Button>
-            <Button onClick={handleRecordAdoption}>记录</Button>
+            <Button variant="ghost" onClick={() => {
+              setAdoptionModalOpen(false);
+              setOperationError(null);
+            }}>取消</Button>
+            <Button onClick={handleRecordAdoption} loading={operationLoading}>记录</Button>
           </>
         }
       >
         <div className="space-y-4">
+          {operationError && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-red-500" />
+              <span className="text-sm text-red-700">{operationError}</span>
+            </div>
+          )}
           <div className="flex items-center gap-4">
             <label className="flex items-center gap-2">
               <input

@@ -11,6 +11,50 @@ router.get('/', (req, res) => {
   res.json({ versions, total: versions.length });
 });
 
+router.get('/compare', (req, res) => {
+  const { baseId, targetId } = req.query;
+  
+  if (!baseId || !targetId) {
+    return res.status(400).json({ error: 'baseId and targetId are required' });
+  }
+  
+  const baseVersion = db.prepare('SELECT * FROM versions WHERE id = ?').get(baseId);
+  const targetVersion = db.prepare('SELECT * FROM versions WHERE id = ?').get(targetId);
+  
+  if (!baseVersion || !targetVersion) {
+    return res.status(404).json({ error: 'Version not found' });
+  }
+  
+  const baseRequirements = db.prepare('SELECT * FROM requirements WHERE version_id = ?').all(baseId);
+  const targetRequirements = db.prepare('SELECT * FROM requirements WHERE version_id = ?').all(targetId);
+  
+  const baseReview = db.prepare('SELECT * FROM reviews WHERE version_id = ?').get(baseId);
+  const targetReview = db.prepare('SELECT * FROM reviews WHERE version_id = ?').get(targetId);
+  
+  const baseIssues = db.prepare('SELECT * FROM issues WHERE review_id = ?').all(baseReview ? (baseReview as any).id : null);
+  const targetIssues = db.prepare('SELECT * FROM issues WHERE review_id = ?').all(targetReview ? (targetReview as any).id : null);
+  
+  res.json({
+    baseVersion: mapVersion(baseVersion),
+    targetVersion: mapVersion(targetVersion),
+    changes: {
+      requirements: {
+        added: targetRequirements.length - baseRequirements.length,
+        baseCount: baseRequirements.length,
+        targetCount: targetRequirements.length,
+      },
+    },
+    reviewComparison: {
+      base: baseReview ? mapReview(baseReview) : null,
+      target: targetReview ? mapReview(targetReview) : null,
+    },
+    issueComparison: {
+      baseCount: baseIssues.length,
+      targetCount: targetIssues.length,
+    },
+  });
+});
+
 router.get('/:id', (req, res) => {
   const row = db.prepare('SELECT * FROM versions WHERE id = ?').get(req.params.id);
   if (!row) {
@@ -67,50 +111,6 @@ router.put('/:id', (req, res) => {
 router.delete('/:id', (req, res) => {
   db.prepare('DELETE FROM versions WHERE id = ?').run(req.params.id);
   res.json({ success: true });
-});
-
-router.get('/compare', (req, res) => {
-  const { baseId, targetId } = req.query;
-  
-  if (!baseId || !targetId) {
-    return res.status(400).json({ error: 'baseId and targetId are required' });
-  }
-  
-  const baseVersion = db.prepare('SELECT * FROM versions WHERE id = ?').get(baseId);
-  const targetVersion = db.prepare('SELECT * FROM versions WHERE id = ?').get(targetId);
-  
-  if (!baseVersion || !targetVersion) {
-    return res.status(404).json({ error: 'Version not found' });
-  }
-  
-  const baseRequirements = db.prepare('SELECT * FROM requirements WHERE version_id = ?').all(baseId);
-  const targetRequirements = db.prepare('SELECT * FROM requirements WHERE version_id = ?').all(targetId);
-  
-  const baseReview = db.prepare('SELECT * FROM reviews WHERE version_id = ?').get(baseId);
-  const targetReview = db.prepare('SELECT * FROM reviews WHERE version_id = ?').get(targetId);
-  
-  const baseIssues = db.prepare('SELECT * FROM issues WHERE review_id = ?').all(baseReview ? (baseReview as any).id : null);
-  const targetIssues = db.prepare('SELECT * FROM issues WHERE review_id = ?').all(targetReview ? (targetReview as any).id : null);
-  
-  res.json({
-    baseVersion: mapVersion(baseVersion),
-    targetVersion: mapVersion(targetVersion),
-    changes: {
-      requirements: {
-        added: targetRequirements.length - baseRequirements.length,
-        baseCount: baseRequirements.length,
-        targetCount: targetRequirements.length,
-      },
-    },
-    reviewComparison: {
-      base: baseReview ? mapReview(baseReview) : null,
-      target: targetReview ? mapReview(targetReview) : null,
-    },
-    issueComparison: {
-      baseCount: baseIssues.length,
-      targetCount: targetIssues.length,
-    },
-  });
 });
 
 export default router;
