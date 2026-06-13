@@ -1,13 +1,31 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { AlertTriangle, Check, User, Calendar, MessageSquare, ChevronRight, Filter } from 'lucide-react';
+import { AlertTriangle, Check, User, Calendar, MessageSquare, ChevronRight, Filter, ListTodo, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { Header } from '@/components/layout';
-import { Card, Button, Badge, Modal } from '@/components/ui';
+import { Card, CardHeader, CardTitle, CardContent, Button, Badge, Modal } from '@/components/ui';
 import { api } from '@/api/client';
 import { useReviewStore, useVersionStore } from '@/store';
 import { getSeverityColor, getStatusColor, formatDateTime } from '@/utils/helpers';
 import { ISSUE_TYPE_LABELS, ISSUE_SEVERITY_LABELS, ISSUE_STATUS_LABELS } from '../../../shared/types';
 import type { Issue } from '../../../shared/types';
+
+interface TodoItem {
+  id: string;
+  issueId: string;
+  title: string;
+  status: string;
+  assignee?: string;
+  dueDate?: string;
+  createdAt: string;
+}
+
+interface AdoptionItem {
+  id: string;
+  issueId: string;
+  isAdopted: boolean;
+  feedback?: string;
+  recordedAt: string;
+}
 
 export function IssueList() {
   const { id } = useParams();
@@ -17,6 +35,8 @@ export function IssueList() {
   
   const [loading, setLoading] = useState(true);
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
+  const [issueTodos, setIssueTodos] = useState<TodoItem[]>([]);
+  const [issueAdoptions, setIssueAdoptions] = useState<AdoptionItem[]>([]);
   const [filters, setFilters] = useState({ status: '', severity: '', type: '' });
   const [statusModalOpen, setStatusModalOpen] = useState(false);
   const [todoModalOpen, setTodoModalOpen] = useState(false);
@@ -38,6 +58,19 @@ export function IssueList() {
       console.error('Failed to load issues:', error);
     } finally {
       setLoading(false);
+    }
+  }
+  
+  async function loadIssueDetails(issueId: string) {
+    try {
+      const todos = await api.issues.getTodos(issueId);
+      setIssueTodos(todos);
+      const adoptions = await api.issues.getAdoptions(issueId);
+      setIssueAdoptions(adoptions);
+    } catch (error) {
+      console.error('Failed to load issue details:', error);
+      setIssueTodos([]);
+      setIssueAdoptions([]);
     }
   }
   
@@ -65,8 +98,8 @@ export function IssueList() {
         assignee: formData.assignee,
         dueDate: formData.dueDate,
       });
+      await loadIssueDetails(selectedIssue.id);
       setTodoModalOpen(false);
-      setSelectedIssue(null);
       setFormData({});
     } catch (error) {
       console.error('Failed to create todo:', error);
@@ -80,12 +113,17 @@ export function IssueList() {
         isAdopted: formData.isAdopted,
         feedback: formData.feedback,
       });
+      await loadIssueDetails(selectedIssue.id);
       setAdoptionModalOpen(false);
-      setSelectedIssue(null);
       setFormData({});
     } catch (error) {
       console.error('Failed to record adoption:', error);
     }
+  }
+  
+  function handleSelectIssue(issue: Issue) {
+    setSelectedIssue(issue);
+    loadIssueDetails(issue.id);
   }
   
   const filteredIssues = issues.filter((issue) => {
@@ -172,7 +210,7 @@ export function IssueList() {
                 <Card
                   key={issue.id}
                   hoverable
-                  onClick={() => setSelectedIssue(issue)}
+                  onClick={() => handleSelectIssue(issue)}
                   className="group"
                 >
                   <div className="flex items-start gap-4">
@@ -201,7 +239,7 @@ export function IssueList() {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          setSelectedIssue(issue);
+                          handleSelectIssue(issue);
                           setFormData({ status: issue.status, assignee: issue.assignee });
                           setStatusModalOpen(true);
                         }}
@@ -212,7 +250,7 @@ export function IssueList() {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          setSelectedIssue(issue);
+                          handleSelectIssue(issue);
                           setFormData({ title: issue.title });
                           setTodoModalOpen(true);
                         }}
@@ -231,7 +269,11 @@ export function IssueList() {
       
       <Modal
         open={selectedIssue !== null && !statusModalOpen && !todoModalOpen && !adoptionModalOpen}
-        onClose={() => setSelectedIssue(null)}
+        onClose={() => {
+          setSelectedIssue(null);
+          setIssueTodos([]);
+          setIssueAdoptions([]);
+        }}
         title={selectedIssue?.title || ''}
         size="lg"
       >
@@ -263,6 +305,76 @@ export function IssueList() {
               <span>创建时间: {formatDateTime(selectedIssue.createdAt)}</span>
               <span>更新时间: {formatDateTime(selectedIssue.updatedAt)}</span>
             </div>
+            
+            {selectedIssue.assignee && (
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <User className="w-4 h-4" />
+                <span>负责人: {selectedIssue.assignee}</span>
+              </div>
+            )}
+            
+            {issueTodos.length > 0 && (
+              <Card padding="sm">
+                <CardHeader>
+                  <div className="flex items-center gap-2">
+                    <ListTodo className="w-4 h-4 text-gray-500" />
+                    <CardTitle className="text-sm">关联待办 ({issueTodos.length})</CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {issueTodos.map((todo) => (
+                      <div key={todo.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                        <div>
+                          <span className="text-sm text-gray-900">{todo.title}</span>
+                          {todo.assignee && (
+                            <span className="text-xs text-gray-500 ml-2">- {todo.assignee}</span>
+                          )}
+                        </div>
+                        <Badge variant={todo.status === 'completed' ? 'success' : 'default'} size="sm">
+                          {todo.status === 'pending' ? '待处理' : todo.status === 'in_progress' ? '进行中' : '已完成'}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+            
+            {issueAdoptions.length > 0 && (
+              <Card padding="sm">
+                <CardHeader>
+                  <div className="flex items-center gap-2">
+                    <MessageSquare className="w-4 h-4 text-gray-500" />
+                    <CardTitle className="text-sm">采纳记录 ({issueAdoptions.length})</CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {issueAdoptions.map((adoption) => (
+                      <div key={adoption.id} className="flex items-start gap-2 p-2 bg-gray-50 rounded">
+                        {adoption.isAdopted ? (
+                          <ThumbsUp className="w-4 h-4 text-green-500" />
+                        ) : (
+                          <ThumbsDown className="w-4 h-4 text-red-500" />
+                        )}
+                        <div className="flex-1">
+                          <span className="text-sm text-gray-900">
+                            {adoption.isAdopted ? '已采纳' : '未采纳'}
+                          </span>
+                          {adoption.feedback && (
+                            <p className="text-xs text-gray-500 mt-1">{adoption.feedback}</p>
+                          )}
+                          <p className="text-xs text-gray-400 mt-1">
+                            {formatDateTime(adoption.recordedAt)}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
             
             <div className="flex gap-2 pt-4 border-t border-gray-200">
               <Button

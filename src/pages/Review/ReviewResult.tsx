@@ -5,7 +5,7 @@ import { Header } from '@/components/layout';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, Button, Badge, Tabs, TabsContent } from '@/components/ui';
 import { api } from '@/api/client';
 import { useReviewStore, useVersionStore } from '@/store';
-import { getSeverityColor, getScoreColor, getRecommendationColor } from '@/utils/helpers';
+import { getSeverityColor, getScoreColor, getRecommendationColor, formatDateTime } from '@/utils/helpers';
 import { ISSUE_TYPE_LABELS, ISSUE_SEVERITY_LABELS, RECOMMENDATION_LABELS } from '../../../shared/types';
 import {
   RadarChart,
@@ -107,7 +107,12 @@ export function ReviewResult() {
                       {review.overallScore} 分
                     </span>
                   </div>
-                  <p className="text-sm text-gray-600">{review.summary}</p>
+                  <p className="text-sm text-gray-600 mb-2">{review.summary}</p>
+                  <div className="flex items-center gap-4 text-xs text-gray-500">
+                    <span>评审时间: {formatDateTime(review.createdAt)}</span>
+                    <span>发现问题: {issues.length} 个</span>
+                    <span>测试关注点: {testFocuses.length} 个</span>
+                  </div>
                 </div>
                 <div className="w-48 h-48">
                   <ResponsiveContainer width="100%" height="100%">
