@@ -13,7 +13,8 @@ async function fetchAPI<T>(path: string, options?: RequestInit): Promise<T> {
     throw new Error(`API Error: ${response.statusText}`);
   }
   
-  return response.json();
+  const text = await response.text();
+  return text ? JSON.parse(text) : null;
 }
 
 export const api = {
@@ -66,6 +67,8 @@ export const api = {
     updateStatus: (id: string, data: { status: string; assignee?: string }) => fetchAPI<any>(`/issues/${id}/status`, { method: 'PUT', body: JSON.stringify(data) }),
     createTodo: (id: string, data: { title: string; assignee?: string; dueDate?: string }) => fetchAPI<any>(`/issues/${id}/todos`, { method: 'POST', body: JSON.stringify(data) }),
     recordAdoption: (id: string, data: { isAdopted: boolean; feedback?: string }) => fetchAPI<any>(`/issues/${id}/adoption`, { method: 'POST', body: JSON.stringify(data) }),
+    getTodos: (id: string) => fetchAPI<any[]>(`/issues/${id}/todos`),
+    getAdoptions: (id: string) => fetchAPI<any[]>(`/issues/${id}/adoption`),
   },
   reports: {
     get: (versionId: string) => fetchAPI<any>(`/versions/${versionId}/report`),

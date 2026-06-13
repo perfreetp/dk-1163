@@ -182,8 +182,8 @@ export function RequirementEdit() {
                             )}
                           </div>
                           <button
-                            onClick={() => {
-                              api.requirements.delete(req.id);
+                            onClick={async () => {
+                              await api.requirements.delete(req.id);
                               deleteRequirement(req.id);
                             }}
                             className="p-1 rounded hover:bg-red-100 text-gray-400 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
@@ -225,8 +225,8 @@ export function RequirementEdit() {
                               }}
                             />
                             <button
-                              onClick={() => {
-                                api.screenshots.delete(shot.id);
+                              onClick={async () => {
+                                await api.screenshots.delete(shot.id);
                                 deleteScreenshot(shot.id);
                               }}
                               className="absolute top-2 right-2 p-1 rounded bg-white/80 hover:bg-red-100 text-gray-600 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
@@ -284,8 +284,8 @@ export function RequirementEdit() {
                               <td className="px-4 py-3 text-sm text-gray-600">{point.expectedValue || '-'}</td>
                               <td className="px-4 py-3 text-right">
                                 <button
-                                  onClick={() => {
-                                    api.trackingPoints.delete(point.id);
+                                  onClick={async () => {
+                                    await api.trackingPoints.delete(point.id);
                                     deleteTrackingPoint(point.id);
                                   }}
                                   className="p-1 rounded hover:bg-red-100 text-gray-400 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
@@ -350,8 +350,8 @@ export function RequirementEdit() {
                               </button>
                             </div>
                             <button
-                              onClick={() => {
-                                api.acceptanceCriteria.delete(criteria.id);
+                              onClick={async () => {
+                                await api.acceptanceCriteria.delete(criteria.id);
                                 deleteAcceptanceCriteria(criteria.id);
                               }}
                               className="p-1 rounded hover:bg-red-100 text-gray-400 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"

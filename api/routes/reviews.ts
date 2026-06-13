@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import db from '../db/database';
 import { v4 as uuidv4 } from 'uuid';
-import type { Review, ModuleScore, TestFocus, Issue } from '../../shared/types';
+import { mapReview, mapModuleScore, mapTestFocus, mapIssue } from '../db/mappers';
 
 const router = Router();
 
@@ -18,9 +18,8 @@ router.post('/versions/:versionId/reviews', (req, res) => {
   `).run(id, versionId, now);
   
   const modules = ['需求完整性', '交互设计', '文案规范', '数据埋点', '发布风险'];
-  const moduleWeights = [25, 20, 15, 20, 20];
   
-  modules.forEach((moduleName, index) => {
+  modules.forEach((moduleName) => {
     const scoreId = uuidv4();
     const score = Math.floor(Math.random() * 30) + 70;
     const details = [
@@ -35,7 +34,6 @@ router.post('/versions/:versionId/reviews', (req, res) => {
     `).run(scoreId, id, moduleName, score, JSON.stringify(details));
   });
   
-  const issueTypes = ['requirement_missing', 'interaction_conflict', 'text_inconsistency', 'exception_flow', 'data_mismatch', 'release_risk'];
   const severities = ['critical', 'high', 'medium', 'low'];
   const issueTemplates = [
     { type: 'requirement_missing', title: '需求遗漏：用户注销流程未定义', description: '在需求文档中未找到用户注销账号的完整流程说明', suggestion: '补充用户注销流程的需求定义，包括注销入口、确认流程、数据处理等' },
@@ -67,7 +65,7 @@ router.post('/versions/:versionId/reviews', (req, res) => {
     { description: '测试支付服务异常时的降级处理', priority: 1, category: '风险测试' },
   ];
   
-  testFocuses.forEach((focus, index) => {
+  testFocuses.forEach((focus) => {
     const focusId = uuidv4();
     db.prepare(`
       INSERT INTO test_focuses (id, review_id, description, priority, category, related_issues)
@@ -75,12 +73,12 @@ router.post('/versions/:versionId/reviews', (req, res) => {
     `).run(focusId, id, focus.description, focus.priority, focus.category);
   });
   
-  const moduleScores = db.prepare('SELECT * FROM module_scores WHERE review_id = ?').all(id) as ModuleScore[];
+  const moduleScores = db.prepare('SELECT * FROM module_scores WHERE review_id = ?').all(id) as { score: number }[];
   const overallScore = Math.round(moduleScores.reduce((sum, m) => sum + m.score, 0) / moduleScores.length);
   
-  const issues = db.prepare('SELECT * FROM issues WHERE review_id = ?').all(id) as Issue[];
-  const criticalCount = issues.filter(i => i.severity === 'critical').length;
-  const highCount = issues.filter(i => i.severity === 'high').length;
+  const issues = db.prepare('SELECT * FROM issues WHERE review_id = ?').all(id) as { severity: string }[];
+  const criticalCount = issues.filter((i) => i.severity === 'critical').length;
+  const highCount = issues.filter((i) => i.severity === 'high').length;
   
   let recommendation = 'recommend';
   if (criticalCount > 0) recommendation = 'not_recommend';
@@ -95,29 +93,23 @@ router.post('/versions/:versionId/reviews', (req, res) => {
 });
 
 router.get('/:reviewId', (req, res) => {
-  const review = db.prepare('SELECT * FROM reviews WHERE id = ?').get(req.params.reviewId) as Review | undefined;
-  if (!review) {
+  const row = db.prepare('SELECT * FROM reviews WHERE id = ?').get(req.params.reviewId);
+  if (!row) {
     return res.status(404).json({ error: 'Review not found' });
   }
-  res.json(review);
+  res.json(mapReview(row));
 });
 
 router.get('/:reviewId/module-scores', (req, res) => {
-  const scores = db.prepare('SELECT * FROM module_scores WHERE review_id = ?').all(req.params.reviewId) as ModuleScore[];
-  const parsedScores = scores.map(s => ({
-    ...s,
-    details: JSON.parse(s.details || '[]'),
-  }));
-  res.json(parsedScores);
+  const rows = db.prepare('SELECT * FROM module_scores WHERE review_id = ?').all(req.params.reviewId);
+  const scores = rows.map(mapModuleScore);
+  res.json(scores);
 });
 
 router.get('/:reviewId/test-focuses', (req, res) => {
-  const focuses = db.prepare('SELECT * FROM test_focuses WHERE review_id = ? ORDER BY priority ASC').all(req.params.reviewId) as TestFocus[];
-  const parsedFocuses = focuses.map(f => ({
-    ...f,
-    relatedIssues: JSON.parse(f.relatedIssues || '[]'),
-  }));
-  res.json(parsedFocuses);
+  const rows = db.prepare('SELECT * FROM test_focuses WHERE review_id = ? ORDER BY priority ASC').all(req.params.reviewId);
+  const focuses = rows.map(mapTestFocus);
+  res.json(focuses);
 });
 
 export default router;

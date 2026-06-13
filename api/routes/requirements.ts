@@ -1,17 +1,22 @@
-import { Router } from 'express';
+import { Router, Request } from 'express';
 import db from '../db/database';
 import { v4 as uuidv4 } from 'uuid';
-import type { Requirement, Screenshot, TrackingPoint, AcceptanceCriteria } from '../../shared/types';
+import { mapRequirement, mapScreenshot, mapTrackingPoint, mapAcceptanceCriteria } from '../db/mappers';
+
+interface VersionParams {
+  versionId: string;
+}
 
 const router = Router({ mergeParams: true });
 
-router.get('/requirements', (req, res) => {
+router.get('/requirements', (req: Request<VersionParams>, res) => {
   const { versionId } = req.params;
-  const requirements = db.prepare('SELECT * FROM requirements WHERE version_id = ? ORDER BY priority DESC, created_at DESC').all(versionId) as Requirement[];
+  const rows = db.prepare('SELECT * FROM requirements WHERE version_id = ? ORDER BY priority DESC, created_at DESC').all(versionId);
+  const requirements = rows.map(mapRequirement);
   res.json(requirements);
 });
 
-router.post('/requirements', (req, res) => {
+router.post('/requirements', (req: Request<VersionParams>, res) => {
   const { versionId } = req.params;
   const { title, content, category, priority } = req.body;
   const id = uuidv4();
@@ -22,8 +27,8 @@ router.post('/requirements', (req, res) => {
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `).run(id, versionId, title, content || '', category || '功能', priority || 0, now);
   
-  const requirement = db.prepare('SELECT * FROM requirements WHERE id = ?').get(id) as Requirement;
-  res.json(requirement);
+  const row = db.prepare('SELECT * FROM requirements WHERE id = ?').get(id);
+  res.json(mapRequirement(row));
 });
 
 router.put('/requirements/:id', (req, res) => {
@@ -38,8 +43,11 @@ router.put('/requirements/:id', (req, res) => {
     WHERE id = ?
   `).run(title, content, category, priority, req.params.id);
   
-  const requirement = db.prepare('SELECT * FROM requirements WHERE id = ?').get(req.params.id) as Requirement;
-  res.json(requirement);
+  const row = db.prepare('SELECT * FROM requirements WHERE id = ?').get(req.params.id);
+  if (!row) {
+    return res.status(404).json({ error: 'Requirement not found' });
+  }
+  res.json(mapRequirement(row));
 });
 
 router.delete('/requirements/:id', (req, res) => {
@@ -47,13 +55,14 @@ router.delete('/requirements/:id', (req, res) => {
   res.json({ success: true });
 });
 
-router.get('/screenshots', (req, res) => {
+router.get('/screenshots', (req: Request<VersionParams>, res) => {
   const { versionId } = req.params;
-  const screenshots = db.prepare('SELECT * FROM screenshots WHERE version_id = ? ORDER BY created_at DESC').all(versionId) as Screenshot[];
+  const rows = db.prepare('SELECT * FROM screenshots WHERE version_id = ? ORDER BY created_at DESC').all(versionId);
+  const screenshots = rows.map(mapScreenshot);
   res.json(screenshots);
 });
 
-router.post('/screenshots', (req, res) => {
+router.post('/screenshots', (req: Request<VersionParams>, res) => {
   const { versionId } = req.params;
   const { url, description, category } = req.body;
   const id = uuidv4();
@@ -64,8 +73,8 @@ router.post('/screenshots', (req, res) => {
     VALUES (?, ?, ?, ?, ?, ?)
   `).run(id, versionId, url, description || '', category || '功能截图', now);
   
-  const screenshot = db.prepare('SELECT * FROM screenshots WHERE id = ?').get(id) as Screenshot;
-  res.json(screenshot);
+  const row = db.prepare('SELECT * FROM screenshots WHERE id = ?').get(id);
+  res.json(mapScreenshot(row));
 });
 
 router.delete('/screenshots/:id', (req, res) => {
@@ -73,17 +82,14 @@ router.delete('/screenshots/:id', (req, res) => {
   res.json({ success: true });
 });
 
-router.get('/tracking-points', (req, res) => {
+router.get('/tracking-points', (req: Request<VersionParams>, res) => {
   const { versionId } = req.params;
-  const points = db.prepare('SELECT * FROM tracking_points WHERE version_id = ? ORDER BY created_at DESC').all(versionId) as TrackingPoint[];
-  const parsedPoints = points.map(p => ({
-    ...p,
-    dataFields: JSON.parse(p.dataFields || '{}'),
-  }));
-  res.json(parsedPoints);
+  const rows = db.prepare('SELECT * FROM tracking_points WHERE version_id = ? ORDER BY created_at DESC').all(versionId);
+  const points = rows.map(mapTrackingPoint);
+  res.json(points);
 });
 
-router.post('/tracking-points', (req, res) => {
+router.post('/tracking-points', (req: Request<VersionParams>, res) => {
   const { versionId } = req.params;
   const { eventName, triggerCondition, dataFields, expectedValue } = req.body;
   const id = uuidv4();
@@ -94,8 +100,8 @@ router.post('/tracking-points', (req, res) => {
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `).run(id, versionId, eventName, triggerCondition || '', JSON.stringify(dataFields || {}), expectedValue || '', now);
   
-  const point = db.prepare('SELECT * FROM tracking_points WHERE id = ?').get(id) as TrackingPoint;
-  res.json({ ...point, dataFields: JSON.parse(point.dataFields || '{}') });
+  const row = db.prepare('SELECT * FROM tracking_points WHERE id = ?').get(id);
+  res.json(mapTrackingPoint(row));
 });
 
 router.put('/tracking-points/:id', (req, res) => {
@@ -108,10 +114,13 @@ router.put('/tracking-points/:id', (req, res) => {
         data_fields = COALESCE(?, data_fields),
         expected_value = COALESCE(?, expected_value)
     WHERE id = ?
-  `).run(eventName, triggerCondition, JSON.stringify(dataFields), expectedValue, req.params.id);
+  `).run(eventName, triggerCondition, dataFields ? JSON.stringify(dataFields) : null, expectedValue, req.params.id);
   
-  const point = db.prepare('SELECT * FROM tracking_points WHERE id = ?').get(req.params.id) as TrackingPoint;
-  res.json({ ...point, dataFields: JSON.parse(point.dataFields || '{}') });
+  const row = db.prepare('SELECT * FROM tracking_points WHERE id = ?').get(req.params.id);
+  if (!row) {
+    return res.status(404).json({ error: 'Tracking point not found' });
+  }
+  res.json(mapTrackingPoint(row));
 });
 
 router.delete('/tracking-points/:id', (req, res) => {
@@ -119,13 +128,14 @@ router.delete('/tracking-points/:id', (req, res) => {
   res.json({ success: true });
 });
 
-router.get('/acceptance-criteria', (req, res) => {
+router.get('/acceptance-criteria', (req: Request<VersionParams>, res) => {
   const { versionId } = req.params;
-  const criteria = db.prepare('SELECT * FROM acceptance_criteria WHERE version_id = ? ORDER BY created_at DESC').all(versionId) as AcceptanceCriteria[];
+  const rows = db.prepare('SELECT * FROM acceptance_criteria WHERE version_id = ? ORDER BY created_at DESC').all(versionId);
+  const criteria = rows.map(mapAcceptanceCriteria);
   res.json(criteria);
 });
 
-router.post('/acceptance-criteria', (req, res) => {
+router.post('/acceptance-criteria', (req: Request<VersionParams>, res) => {
   const { versionId } = req.params;
   const { description, isRequired } = req.body;
   const id = uuidv4();
@@ -136,8 +146,8 @@ router.post('/acceptance-criteria', (req, res) => {
     VALUES (?, ?, ?, ?, 'pending', ?)
   `).run(id, versionId, description, isRequired ? 1 : 0, now);
   
-  const criteria = db.prepare('SELECT * FROM acceptance_criteria WHERE id = ?').get(id) as AcceptanceCriteria;
-  res.json(criteria);
+  const row = db.prepare('SELECT * FROM acceptance_criteria WHERE id = ?').get(id);
+  res.json(mapAcceptanceCriteria(row));
 });
 
 router.put('/acceptance-criteria/:id/status', (req, res) => {
@@ -145,8 +155,11 @@ router.put('/acceptance-criteria/:id/status', (req, res) => {
   
   db.prepare('UPDATE acceptance_criteria SET status = ? WHERE id = ?').run(status, req.params.id);
   
-  const criteria = db.prepare('SELECT * FROM acceptance_criteria WHERE id = ?').get(req.params.id) as AcceptanceCriteria;
-  res.json(criteria);
+  const row = db.prepare('SELECT * FROM acceptance_criteria WHERE id = ?').get(req.params.id);
+  if (!row) {
+    return res.status(404).json({ error: 'Acceptance criteria not found' });
+  }
+  res.json(mapAcceptanceCriteria(row));
 });
 
 router.delete('/acceptance-criteria/:id', (req, res) => {

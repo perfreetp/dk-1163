@@ -1,21 +1,22 @@
 import { Router } from 'express';
 import db from '../db/database';
 import { v4 as uuidv4 } from 'uuid';
-import type { Version } from '../../shared/types';
+import { mapVersion, mapReview } from '../db/mappers';
 
 const router = Router();
 
 router.get('/', (req, res) => {
-  const versions = db.prepare('SELECT * FROM versions ORDER BY created_at DESC').all() as Version[];
+  const rows = db.prepare('SELECT * FROM versions ORDER BY created_at DESC').all();
+  const versions = rows.map(mapVersion);
   res.json({ versions, total: versions.length });
 });
 
 router.get('/:id', (req, res) => {
-  const version = db.prepare('SELECT * FROM versions WHERE id = ?').get(req.params.id) as Version | undefined;
-  if (!version) {
+  const row = db.prepare('SELECT * FROM versions WHERE id = ?').get(req.params.id);
+  if (!row) {
     return res.status(404).json({ error: 'Version not found' });
   }
-  res.json(version);
+  res.json(mapVersion(row));
 });
 
 router.post('/', (req, res) => {
@@ -29,9 +30,10 @@ router.post('/', (req, res) => {
       VALUES (?, ?, ?, ?, 'draft', ?, ?)
     `).run(id, versionNumber, description || '', releaseDate || '', now, now);
     
-    const version = db.prepare('SELECT * FROM versions WHERE id = ?').get(id) as Version;
-    res.json(version);
+    const row = db.prepare('SELECT * FROM versions WHERE id = ?').get(id);
+    res.json(mapVersion(row));
   } catch (error) {
+    console.error('Create version error:', error);
     res.status(400).json({ error: 'Version number already exists' });
   }
 });
@@ -51,9 +53,13 @@ router.put('/:id', (req, res) => {
       WHERE id = ?
     `).run(versionNumber, description, releaseDate, status, now, req.params.id);
     
-    const version = db.prepare('SELECT * FROM versions WHERE id = ?').get(req.params.id) as Version;
-    res.json(version);
+    const row = db.prepare('SELECT * FROM versions WHERE id = ?').get(req.params.id);
+    if (!row) {
+      return res.status(404).json({ error: 'Version not found' });
+    }
+    res.json(mapVersion(row));
   } catch (error) {
+    console.error('Update version error:', error);
     res.status(400).json({ error: 'Failed to update version' });
   }
 });
@@ -66,8 +72,12 @@ router.delete('/:id', (req, res) => {
 router.get('/compare', (req, res) => {
   const { baseId, targetId } = req.query;
   
-  const baseVersion = db.prepare('SELECT * FROM versions WHERE id = ?').get(baseId) as Version | undefined;
-  const targetVersion = db.prepare('SELECT * FROM versions WHERE id = ?').get(targetId) as Version | undefined;
+  if (!baseId || !targetId) {
+    return res.status(400).json({ error: 'baseId and targetId are required' });
+  }
+  
+  const baseVersion = db.prepare('SELECT * FROM versions WHERE id = ?').get(baseId);
+  const targetVersion = db.prepare('SELECT * FROM versions WHERE id = ?').get(targetId);
   
   if (!baseVersion || !targetVersion) {
     return res.status(404).json({ error: 'Version not found' });
@@ -79,9 +89,12 @@ router.get('/compare', (req, res) => {
   const baseReview = db.prepare('SELECT * FROM reviews WHERE version_id = ?').get(baseId);
   const targetReview = db.prepare('SELECT * FROM reviews WHERE version_id = ?').get(targetId);
   
+  const baseIssues = db.prepare('SELECT * FROM issues WHERE review_id = ?').all(baseReview ? (baseReview as any).id : null);
+  const targetIssues = db.prepare('SELECT * FROM issues WHERE review_id = ?').all(targetReview ? (targetReview as any).id : null);
+  
   res.json({
-    baseVersion,
-    targetVersion,
+    baseVersion: mapVersion(baseVersion),
+    targetVersion: mapVersion(targetVersion),
     changes: {
       requirements: {
         added: targetRequirements.length - baseRequirements.length,
@@ -90,8 +103,12 @@ router.get('/compare', (req, res) => {
       },
     },
     reviewComparison: {
-      base: baseReview,
-      target: targetReview,
+      base: baseReview ? mapReview(baseReview) : null,
+      target: targetReview ? mapReview(targetReview) : null,
+    },
+    issueComparison: {
+      baseCount: baseIssues.length,
+      targetCount: targetIssues.length,
     },
   });
 });

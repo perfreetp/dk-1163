@@ -1,33 +1,30 @@
 import { Router } from 'express';
 import db from '../db/database';
-import type { Version, Review, ModuleScore, Issue, TestFocus, ReviewReport } from '../../shared/types';
+import { mapVersion, mapReview, mapModuleScore, mapIssue, mapTestFocus } from '../db/mappers';
 
 const router = Router();
 
 router.get('/versions/:versionId/report', (req, res) => {
-  const version = db.prepare('SELECT * FROM versions WHERE id = ?').get(req.params.versionId) as Version | undefined;
-  if (!version) {
+  const versionRow = db.prepare('SELECT * FROM versions WHERE id = ?').get(req.params.versionId);
+  if (!versionRow) {
     return res.status(404).json({ error: 'Version not found' });
   }
+  const version = mapVersion(versionRow);
   
-  const review = db.prepare('SELECT * FROM reviews WHERE version_id = ?').get(req.params.versionId) as Review | undefined;
-  if (!review) {
+  const reviewRow = db.prepare('SELECT * FROM reviews WHERE version_id = ?').get(req.params.versionId);
+  if (!reviewRow) {
     return res.status(404).json({ error: 'Review not found for this version' });
   }
+  const review = mapReview(reviewRow);
   
-  const moduleScores = db.prepare('SELECT * FROM module_scores WHERE review_id = ?').all(review.id) as ModuleScore[];
-  const parsedScores = moduleScores.map(s => ({
-    ...s,
-    details: JSON.parse(s.details || '[]'),
-  }));
+  const moduleScoreRows = db.prepare('SELECT * FROM module_scores WHERE review_id = ?').all(review.id);
+  const moduleScores = moduleScoreRows.map(mapModuleScore);
   
-  const issues = db.prepare('SELECT * FROM issues WHERE review_id = ?').all(review.id) as Issue[];
+  const issueRows = db.prepare('SELECT * FROM issues WHERE review_id = ?').all(review.id);
+  const issues = issueRows.map(mapIssue);
   
-  const testFocuses = db.prepare('SELECT * FROM test_focuses WHERE review_id = ?').all(review.id) as TestFocus[];
-  const parsedFocuses = testFocuses.map(f => ({
-    ...f,
-    relatedIssues: JSON.parse(f.relatedIssues || '[]'),
-  }));
+  const testFocusRows = db.prepare('SELECT * FROM test_focuses WHERE review_id = ?').all(review.id);
+  const testFocuses = testFocusRows.map(mapTestFocus);
   
   const riskSummary = {
     critical: issues.filter(i => i.severity === 'critical').length,
@@ -36,32 +33,32 @@ router.get('/versions/:versionId/report', (req, res) => {
     low: issues.filter(i => i.severity === 'low').length,
   };
   
-  const previousVersions = db.prepare('SELECT * FROM versions WHERE created_at < ? ORDER BY created_at DESC LIMIT 1').all(version.createdAt) as Version[];
+  const previousVersionRows = db.prepare('SELECT * FROM versions WHERE created_at < ? ORDER BY created_at DESC LIMIT 1').all(version.createdAt);
   
   let comparison = undefined;
-  if (previousVersions.length > 0) {
-    const previousReview = db.prepare('SELECT * FROM reviews WHERE version_id = ?').get(previousVersions[0].id) as Review | undefined;
-    if (previousReview) {
-      const previousIssues = db.prepare('SELECT * FROM issues WHERE review_id = ?').all(previousReview.id) as Issue[];
+  if (previousVersionRows.length > 0) {
+    const previousVersion = mapVersion(previousVersionRows[0]);
+    const previousReviewRow = db.prepare('SELECT * FROM reviews WHERE version_id = ?').get(previousVersion.id);
+    if (previousReviewRow) {
+      const previousReview = mapReview(previousReviewRow);
+      const previousIssueRows = db.prepare('SELECT * FROM issues WHERE review_id = ?').all(previousReview.id);
       comparison = {
-        previousVersion: previousVersions[0],
+        previousVersion: previousVersion,
         scoreChange: review.overallScore - previousReview.overallScore,
-        issueCountChange: issues.length - previousIssues.length,
+        issueCountChange: issues.length - previousIssueRows.length,
       };
     }
   }
   
-  const report: ReviewReport = {
+  res.json({
     version,
     review,
-    moduleScores: parsedScores,
+    moduleScores,
     issues,
-    testFocuses: parsedFocuses,
+    testFocuses,
     riskSummary,
     comparison,
-  };
-  
-  res.json(report);
+  });
 });
 
 export default router;

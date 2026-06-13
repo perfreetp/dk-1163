@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { FileCheck, AlertTriangle, TrendingUp, Download, Check, X, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { Header } from '@/components/layout';
-import { Card, Button, Badge, Tabs, TabsContent, Progress } from '@/components/ui';
+import { Card, CardHeader, CardTitle, CardContent, CardDescription, Button, Badge, Tabs, TabsContent, Progress } from '@/components/ui';
 import { api } from '@/api/client';
 import { useReviewStore, useVersionStore } from '@/store';
 import { getSeverityColor, getScoreColor, getRecommendationColor, formatDate } from '@/utils/helpers';

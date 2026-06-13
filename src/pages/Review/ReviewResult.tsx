@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Brain, AlertTriangle, Target, TrendingUp, ChevronRight } from 'lucide-react';
 import { Header } from '@/components/layout';
-import { Card, Button, Badge, Tabs, TabsContent } from '@/components/ui';
+import { Card, CardHeader, CardTitle, CardContent, CardDescription, Button, Badge, Tabs, TabsContent } from '@/components/ui';
 import { api } from '@/api/client';
 import { useReviewStore, useVersionStore } from '@/store';
 import { getSeverityColor, getScoreColor, getRecommendationColor } from '@/utils/helpers';
